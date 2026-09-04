@@ -101,3 +101,20 @@ export function summarise(store: Store) {
     })),
   };
 }
+
+export function inCurrency<T extends { currency?: string }>(items: T[], currency: Currency) {
+  return items.filter((item) => asCurrency(item.currency) === currency);
+}
+
+export function booksFor(store: Store, currency: Currency) {
+  const summary = summarise(store);
+  return {
+    totals: currency === "ZWG" ? summary.zwg : summary.usd,
+    byCategory: summary.byCategory.map((c) => ({
+      id: c.id,
+      name: c.name,
+      hint: c.hint,
+      line: currency === "ZWG" ? c.zwg : c.usd,
+    })),
+  };
+}

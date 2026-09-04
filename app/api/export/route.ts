@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { hasSession } from "@/lib/auth";
 import { EXPENSE_CATEGORIES, GIFT_TYPES, INKIND_TYPES, PAYMENT_METHODS } from "@/lib/categories";
 import { getStore } from "@/lib/db";
+import { asCurrency, currencyLabel } from "@/lib/money";
 import { formatPerson } from "@/lib/people";
-import { personName, pledgePaid } from "@/lib/summaries";
+import { inCurrency, personName, pledgePaid } from "@/lib/summaries";
 
 function csv(rows: string[][]) {
   return rows
@@ -19,13 +20,22 @@ function csv(rows: string[][]) {
     .join("\n");
 }
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
   if (!(await hasSession())) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
   const store = await getStore();
+  const currency = asCurrency(req.nextUrl.searchParams.get("ccy"));
+  const label = currencyLabel(currency);
+  const pledges = inCurrency(store.pledges, currency);
+  const donations = inCurrency(store.donations, currency);
+  const gifts = inCurrency(store.inKind, currency);
+  const expenses = inCurrency(store.expenses, currency);
   const parts: string[] = [];
 
+  parts.push(`${label} REPORT`);
   parts.push("PEOPLE");
   parts.push(
     csv([
@@ -49,12 +59,12 @@ export async function GET() {
   parts.push(
     csv([
       ["Date", "Name", "Currency", "Pledged", "Paid", "Outstanding", "Frequency", "Status", "Notes"],
-      ...store.pledges.map((p) => {
+      ...pledges.map((p) => {
         const paid = pledgePaid(store, p.id);
         return [
           p.startDate,
           personName(store, p.personId),
-          p.currency || "USD",
+          currency,
           String(p.amount),
           String(paid),
           String(Math.max(0, p.amount - paid)),
@@ -70,11 +80,11 @@ export async function GET() {
   parts.push(
     csv([
       ["Date", "Receipt", "Name", "Currency", "Amount", "Method", "Type", "Reference", "Notes"],
-      ...store.donations.map((d) => [
+      ...donations.map((d) => [
         d.date,
         d.receiptNo,
         personName(store, d.personId),
-        d.currency || "USD",
+        currency,
         String(d.amount),
         PAYMENT_METHODS.find((m) => m.id === d.method)?.name ?? d.method,
         GIFT_TYPES.find((g) => g.id === d.giftType)?.name ?? d.giftType,
@@ -88,14 +98,14 @@ export async function GET() {
   parts.push(
     csv([
       ["Date", "Name", "Description", "Type", "Qty", "Unit", "Currency", "Value", "Offsets category", "Notes"],
-      ...store.inKind.map((g) => [
+      ...gifts.map((g) => [
         g.date,
         personName(store, g.personId),
         g.description,
         INKIND_TYPES.find((t) => t.id === g.type)?.name ?? g.type,
         String(g.quantity),
         g.unit,
-        g.currency || "USD",
+        currency,
         String(g.estimatedValue),
         EXPENSE_CATEGORIES.find((c) => c.id === g.categoryId)?.name ?? g.categoryId,
         g.notes,
@@ -107,12 +117,12 @@ export async function GET() {
   parts.push(
     csv([
       ["Date", "Category", "Payee", "Description", "Currency", "Amount", "Invoice", "Paid", "Method", "Notes"],
-      ...store.expenses.map((e) => [
+      ...expenses.map((e) => [
         e.date,
         EXPENSE_CATEGORIES.find((c) => c.id === e.categoryId)?.name ?? e.categoryId,
         e.payee,
         e.description,
-        e.currency || "USD",
+        currency,
         String(e.amount),
         e.invoiceNo,
         e.paid ? "Yes" : "No",
@@ -125,20 +135,20 @@ export async function GET() {
   parts.push("\nBUDGET");
   parts.push(
     csv([
-      ["Category", "USD budget", "ZWG budget"],
+      ["Category", `${label} budget`],
       ...store.budgets.map((b) => [
         EXPENSE_CATEGORIES.find((c) => c.id === b.categoryId)?.name ?? b.categoryId,
-        String(b.usd),
-        String(b.zwg),
+        String(currency === "ZWG" ? b.zwg : b.usd),
       ]),
     ]),
   );
 
+  const day = new Date().toISOString().slice(0, 10);
   const body = parts.join("\n");
   return new NextResponse(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="CE-CBD-building-fund.csv"`,
+      "Content-Disposition": `attachment; filename="CE-CBD-building-fund-${currency}-${day}.csv"`,
     },
   });
 }

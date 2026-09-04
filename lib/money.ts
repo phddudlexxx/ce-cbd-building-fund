@@ -9,6 +9,10 @@ export function asCurrency(value: unknown): Currency {
   return value === "ZWG" ? "ZWG" : "USD";
 }
 
+export function currencyLabel(currency: Currency) {
+  return currency === "ZWG" ? "ZWG$" : "USD$";
+}
+
 export function formatMoney(amount: number, currency: Currency = "USD") {
   const n = Number.isFinite(amount) ? amount : 0;
   const formatted = new Intl.NumberFormat("en-US", {

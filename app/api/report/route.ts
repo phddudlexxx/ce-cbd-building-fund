@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasSession } from "@/lib/auth";
 import { EXPENSE_CATEGORIES } from "@/lib/categories";
 import { getStore } from "@/lib/db";
-import { buildingFundPdf, reportFileName } from "@/lib/report-pdf";
+import { asCurrency } from "@/lib/money";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!(await hasSession())) {
@@ -14,9 +15,12 @@ export async function GET(req: NextRequest) {
   if (cat && !EXPENSE_CATEGORIES.some((c) => c.id === cat)) {
     return NextResponse.json({ error: "Unknown category" }, { status: 400 });
   }
+  const currency = asCurrency(req.nextUrl.searchParams.get("ccy"));
   const store = await getStore();
-  const bytes = buildingFundPdf(store, cat);
-  const filename = reportFileName(cat);
+  const { buildingFundPdf, reportFileName } = await import("@/lib/report-pdf");
+  const options = { categoryId: cat, currency };
+  const bytes = buildingFundPdf(store, options);
+  const filename = reportFileName(options);
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",

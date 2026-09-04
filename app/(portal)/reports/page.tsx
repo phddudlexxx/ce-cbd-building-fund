@@ -3,14 +3,26 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
-import { Card, ScreenTitle } from "@/components/ui";
+import { Card, CurrencyToggle, ScreenTitle } from "@/components/ui";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, type ExpenseCategoryId } from "@/lib/categories";
-import { asCurrency, formatDate, formatMoney, formatPair } from "@/lib/money";
-import { personName, pledgePaid, summarise } from "@/lib/summaries";
+import { asCurrency, currencyLabel, formatDate, formatMoney, type Currency } from "@/lib/money";
+import { booksFor, inCurrency, personName, pledgePaid } from "@/lib/summaries";
 import type { Store } from "@/lib/types";
 import { useData } from "@/lib/use-data";
 
 const tabs = ["Snapshot", "Pledges", "Cash", "In-kind", "Spend"] as const;
+
+function reportsHref(opts: {
+  tab?: (typeof tabs)[number];
+  cat?: string | null;
+  ccy: Currency;
+}) {
+  const sp = new URLSearchParams();
+  sp.set("ccy", opts.ccy);
+  if (opts.cat) sp.set("cat", opts.cat);
+  else if (opts.tab && opts.tab !== "Snapshot") sp.set("tab", opts.tab);
+  return `/reports?${sp.toString()}`;
+}
 
 export default function ReportsPage() {
   return (
@@ -22,29 +34,45 @@ export default function ReportsPage() {
 
 function ReportsInner() {
   const { store, loading } = useData();
+  const router = useRouter();
   const params = useSearchParams();
   const tabParam = params.get("tab");
   const tab = tabs.includes(tabParam as (typeof tabs)[number]) ? (tabParam as (typeof tabs)[number]) : "Snapshot";
   const openId = params.get("cat") as ExpenseCategoryId | null;
-  const summary = useMemo(() => (store ? summarise(store) : null), [store]);
+  const currency = asCurrency(params.get("ccy"));
+  const label = currencyLabel(currency);
+  const books = useMemo(() => (store ? booksFor(store, currency) : null), [store, currency]);
 
-  if (loading || !store || !summary) {
+  if (loading || !store || !books) {
     return <p className="py-10 text-center text-[var(--muted)]">Building reports…</p>;
   }
 
   const openCategory = EXPENSE_CATEGORIES.find((c) => c.id === openId);
+  const pledges = inCurrency(store.pledges, currency);
+  const donations = inCurrency(store.donations, currency);
+  const gifts = inCurrency(store.inKind, currency);
+  const expenses = inCurrency(store.expenses, currency);
+  const totals = books.totals;
 
   return (
     <div>
       <ScreenTitle
-        title="Reports"
-        subtitle="Tap a category to see every bill. Open Pledges, Cash, In-kind or Spend and tap Edit to fix a record."
+        title={`${label} report`}
+        subtitle="USD$ and ZWG$ are two separate books. Choose one, then download that report only."
       />
+      <div className="mb-4">
+        <CurrencyToggle
+          value={currency}
+          onChange={(next) => {
+            router.replace(reportsHref({ tab: openCategory ? "Snapshot" : tab, cat: openId, ccy: next }));
+          }}
+        />
+      </div>
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {tabs.map((t) => (
           <Link
             key={t}
-            href={t === "Snapshot" ? "/reports" : `/reports?tab=${t}`}
+            href={reportsHref({ tab: t, ccy: currency })}
             className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
               tab === t && !openCategory
                 ? "bg-[var(--purple)] text-white"
@@ -56,63 +84,55 @@ function ReportsInner() {
         ))}
       </div>
 
-      {openCategory ? <CategoryDetail store={store} categoryId={openCategory.id} /> : null}
+      {openCategory ? <CategoryDetail store={store} categoryId={openCategory.id} currency={currency} /> : null}
 
       {!openCategory && tab === "Snapshot" ? (
         <div className="space-y-3">
           <Card>
-            <h3 className="font-semibold">Board snapshot</h3>
+            <h3 className="font-semibold">Board snapshot · {label}</h3>
             <dl className="mt-3 space-y-2 text-sm">
-              <Row k="Campaign goal" v={formatPair(summary.usd.goal, summary.zwg.goal)} />
-              <Row k="Total pledged" v={formatPair(summary.usd.pledged, summary.zwg.pledged)} />
-              <Row k="Outstanding pledges" v={formatPair(summary.usd.outstandingPledges, summary.zwg.outstandingPledges)} />
-              <Row k="Cash received" v={formatPair(summary.usd.cashIn, summary.zwg.cashIn)} />
-              <Row k="In-kind received" v={formatPair(summary.usd.inKindValue, summary.zwg.inKindValue)} />
-              <Row k="Total funding received" v={formatPair(summary.usd.fundingReceived, summary.zwg.fundingReceived)} />
-              <Row k="Spent (all bills)" v={formatPair(summary.usd.spentAll, summary.zwg.spentAll)} />
-              <Row k="Unpaid bills" v={formatPair(summary.usd.spentUnpaid, summary.zwg.spentUnpaid)} />
-              <Row k="Cash available" v={formatPair(summary.usd.cashAvailable, summary.zwg.cashAvailable)} />
+              <Row k="Campaign goal" v={formatMoney(totals.goal, currency)} />
+              <Row k="Total pledged" v={formatMoney(totals.pledged, currency)} />
+              <Row k="Outstanding pledges" v={formatMoney(totals.outstandingPledges, currency)} />
+              <Row k="Cash received" v={formatMoney(totals.cashIn, currency)} />
+              <Row k="In-kind received" v={formatMoney(totals.inKindValue, currency)} />
+              <Row k="Total funding received" v={formatMoney(totals.fundingReceived, currency)} />
+              <Row k="Spent (all bills)" v={formatMoney(totals.spentAll, currency)} />
+              <Row k="Unpaid bills" v={formatMoney(totals.spentUnpaid, currency)} />
+              <Row k="Cash available" v={formatMoney(totals.cashAvailable, currency)} />
               <Row
                 k="If remaining pledges come in"
-                v={formatPair(
-                  summary.usd.cashAvailable + summary.usd.outstandingPledges,
-                  summary.zwg.cashAvailable + summary.zwg.outstandingPledges,
-                )}
+                v={formatMoney(totals.cashAvailable + totals.outstandingPledges, currency)}
               />
             </dl>
             <p className="mt-3 text-xs text-[var(--muted)]">
-              Do not spend against pledges. Cash available in each currency is the only number that can pay a supplier in that currency today.
+              Do not spend against pledges. Cash available in {label} is the only number that can pay a supplier in{" "}
+              {label} today.
             </p>
           </Card>
           <Card>
             <h3 className="font-semibold">By building category</h3>
-            <p className="mt-1 text-xs text-[var(--muted)]">Tap a line to open the bills in that bucket.</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Tap a line to open the {label} bills in that bucket.</p>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[36rem] text-left text-sm">
+              <table className="w-full min-w-[22rem] text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-[var(--muted)]">
                   <tr>
                     <th className="pb-2 font-medium">Category</th>
-                    <th className="pb-2 font-medium">USD$ budget</th>
-                    <th className="pb-2 font-medium">USD$ used</th>
-                    <th className="pb-2 font-medium">ZWG$ budget</th>
-                    <th className="pb-2 font-medium">ZWG$ used</th>
+                    <th className="pb-2 font-medium">{label} budget</th>
+                    <th className="pb-2 font-medium">{label} used</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {summary.byCategory.map((c) => (
+                  {books.byCategory.map((c) => (
                     <tr key={c.id} className="border-t border-[var(--line)]">
                       <td className="py-2 pr-2">
-                        <Link href={`/reports?cat=${c.id}`} className="font-medium text-[var(--purple)]">
+                        <Link href={reportsHref({ cat: c.id, ccy: currency })} className="font-medium text-[var(--purple)]">
                           {c.name}
                         </Link>
                       </td>
-                      <td>{formatMoney(c.usd.budget, "USD")}</td>
-                      <td className={c.usd.remaining < 0 ? "text-red-700" : ""}>
-                        {formatMoney(c.usd.spent + c.usd.inKind, "USD")}
-                      </td>
-                      <td>{formatMoney(c.zwg.budget, "ZWG")}</td>
-                      <td className={c.zwg.remaining < 0 ? "text-red-700" : ""}>
-                        {formatMoney(c.zwg.spent + c.zwg.inKind, "ZWG")}
+                      <td>{formatMoney(c.line.budget, currency)}</td>
+                      <td className={c.line.remaining < 0 ? "text-red-700" : ""}>
+                        {formatMoney(c.line.spent + c.line.inKind, currency)}
                       </td>
                     </tr>
                   ))}
@@ -121,16 +141,16 @@ function ReportsInner() {
             </div>
           </Card>
           <a
-            href="/api/report"
+            href={`/api/report?ccy=${currency}`}
             className="block rounded-2xl bg-[var(--purple)] py-3.5 text-center font-semibold text-white"
           >
-            Download PDF (landscape)
+            Download {label} PDF
           </a>
           <a
-            href="/api/export"
+            href={`/api/export?ccy=${currency}`}
             className="block rounded-2xl border border-[var(--line)] bg-white py-3.5 text-center font-semibold text-[var(--purple)]"
           >
-            Download CSV for Excel
+            Download {label} CSV for Excel
           </a>
         </div>
       ) : null}
@@ -150,9 +170,8 @@ function ReportsInner() {
                 </tr>
               </thead>
               <tbody>
-                {store.pledges.map((p) => {
+                {pledges.map((p) => {
                   const paid = pledgePaid(store, p.id);
-                  const currency = asCurrency(p.currency);
                   return (
                     <tr key={p.id} className="border-t border-[var(--line)]">
                       <td className="py-2 pr-2">{personName(store, p.personId)}</td>
@@ -170,8 +189,8 @@ function ReportsInner() {
                 })}
               </tbody>
             </table>
-            {store.pledges.length === 0 ? (
-              <p className="py-4 text-sm text-[var(--muted)]">No pledges yet.</p>
+            {pledges.length === 0 ? (
+              <p className="py-4 text-sm text-[var(--muted)]">No {label} pledges yet.</p>
             ) : null}
           </div>
         </Card>
@@ -179,32 +198,32 @@ function ReportsInner() {
 
       {!openCategory && tab === "Cash" ? (
         <Ledger
-          rows={store.donations.map((d) => [
+          rows={donations.map((d) => [
             formatDate(d.date),
             d.receiptNo,
             personName(store, d.personId),
-            formatMoney(d.amount, asCurrency(d.currency)),
+            formatMoney(d.amount, currency),
             d.method.toUpperCase(),
           ])}
-          hrefs={store.donations.map((d) => `/capture/cash?id=${d.id}`)}
+          hrefs={donations.map((d) => `/capture/cash?id=${d.id}`)}
           heads={["Date", "Receipt", "Name", "Amount", "How"]}
-          empty="No cash received yet."
+          empty={`No ${label} cash received yet.`}
         />
       ) : null}
 
       {!openCategory && tab === "In-kind" ? (
         <Ledger
-          rows={store.inKind.map((g) => [
+          rows={gifts.map((g) => [
             formatDate(g.date),
             personName(store, g.personId),
             g.description,
             `${g.quantity} ${g.unit}`,
-            formatMoney(g.estimatedValue, asCurrency(g.currency)),
+            formatMoney(g.estimatedValue, currency),
             EXPENSE_CATEGORIES.find((c) => c.id === g.categoryId)?.name ?? g.categoryId,
           ])}
-          hrefs={store.inKind.map((g) => `/capture/inkind?id=${g.id}`)}
+          hrefs={gifts.map((g) => `/capture/inkind?id=${g.id}`)}
           heads={["Date", "From", "What", "Qty", "Value", "Offsets"]}
-          empty="No in-kind gifts yet."
+          empty={`No ${label} in-kind gifts yet.`}
         />
       ) : null}
 
@@ -214,7 +233,7 @@ function ReportsInner() {
             {EXPENSE_CATEGORIES.map((c) => (
               <Link
                 key={c.id}
-                href={`/reports?cat=${c.id}`}
+                href={reportsHref({ cat: c.id, ccy: currency })}
                 className="whitespace-nowrap rounded-full border border-[var(--line)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--purple)]"
               >
                 {c.name}
@@ -222,17 +241,17 @@ function ReportsInner() {
             ))}
           </div>
           <Ledger
-            rows={store.expenses.map((e) => [
+            rows={expenses.map((e) => [
               formatDate(e.date),
               EXPENSE_CATEGORIES.find((c) => c.id === e.categoryId)?.name ?? e.categoryId,
               e.payee,
               e.description,
-              formatMoney(e.amount, asCurrency(e.currency)),
+              formatMoney(e.amount, currency),
               e.paid ? "Paid" : "Unpaid",
             ])}
-            hrefs={store.expenses.map((e) => `/capture/expense?id=${e.id}`)}
+            hrefs={expenses.map((e) => `/capture/expense?id=${e.id}`)}
             heads={["Date", "Category", "Payee", "What", "Amount", "Status"]}
-            empty="No expenses yet."
+            empty={`No ${label} expenses yet.`}
           />
         </div>
       ) : null}
@@ -240,15 +259,24 @@ function ReportsInner() {
   );
 }
 
-function CategoryDetail({ store, categoryId }: { store: Store; categoryId: ExpenseCategoryId }) {
+function CategoryDetail({
+  store,
+  categoryId,
+  currency,
+}: {
+  store: Store;
+  categoryId: ExpenseCategoryId;
+  currency: Currency;
+}) {
   const router = useRouter();
   const cat = EXPENSE_CATEGORIES.find((c) => c.id === categoryId);
-  const summary = summarise(store).byCategory.find((c) => c.id === categoryId);
-  const bills = store.expenses
+  const label = currencyLabel(currency);
+  const summary = booksFor(store, currency).byCategory.find((c) => c.id === categoryId);
+  const bills = inCurrency(store.expenses, currency)
     .filter((e) => e.categoryId === categoryId)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
-  const gifts = store.inKind
+  const gifts = inCurrency(store.inKind, currency)
     .filter((g) => g.categoryId === categoryId)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -259,37 +287,37 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
     <div className="space-y-3">
       <button
         type="button"
-        onClick={() => router.push("/reports")}
+        onClick={() => router.push(reportsHref({ ccy: currency }))}
         className="text-sm font-medium text-[var(--purple)]"
       >
         ← All categories
       </button>
       <a
-        href={`/api/report?cat=${categoryId}`}
+        href={`/api/report?cat=${categoryId}&ccy=${currency}`}
         className="block rounded-2xl bg-[var(--purple)] py-3.5 text-center font-semibold text-white"
       >
-        Download this category as PDF (landscape)
+        Download this {label} category as PDF
       </a>
       <Card className="bg-[var(--purple)] text-white">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--gold)]">Category</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--gold)]">Category · {label}</p>
         <h3 className="mt-1 font-[family-name:var(--font-display)] text-2xl">{cat.name}</h3>
         <p className="mt-1 text-sm text-white/75">{cat.hint}</p>
         <dl className="mt-4 space-y-1.5 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-white/70">Budget</dt>
-            <dd>{formatPair(summary.usd.budget, summary.zwg.budget)}</dd>
+            <dd>{formatMoney(summary.line.budget, currency)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-white/70">Bills</dt>
-            <dd>{formatPair(summary.usd.spent, summary.zwg.spent)}</dd>
+            <dd>{formatMoney(summary.line.spent, currency)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-white/70">In-kind</dt>
-            <dd>{formatPair(summary.usd.inKind, summary.zwg.inKind)}</dd>
+            <dd>{formatMoney(summary.line.inKind, currency)}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-white/70">Still needed</dt>
-            <dd>{formatPair(summary.usd.remaining, summary.zwg.remaining)}</dd>
+            <dd>{formatMoney(summary.line.remaining, currency)}</dd>
           </div>
         </dl>
       </Card>
@@ -297,7 +325,7 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
       <Card>
         <h3 className="font-semibold">Bills in this category</h3>
         {bills.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">No expenditure captured here yet.</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">No {label} expenditure captured here yet.</p>
         ) : (
           <ul className="mt-3 divide-y divide-[var(--line)]">
             {bills.map((e) => (
@@ -317,7 +345,7 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
                       Edit
                     </Link>
                   </div>
-                  <p className="shrink-0 font-semibold">{formatMoney(e.amount, asCurrency(e.currency))}</p>
+                  <p className="shrink-0 font-semibold">{formatMoney(e.amount, currency)}</p>
                 </div>
               </li>
             ))}
@@ -328,7 +356,7 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
       <Card>
         <h3 className="font-semibold">In-kind offsetting this category</h3>
         {gifts.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">No gifts in kind tagged here.</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">No {label} gifts in kind tagged here.</p>
         ) : (
           <ul className="mt-3 divide-y divide-[var(--line)]">
             {gifts.map((g) => (
@@ -344,9 +372,7 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
                       Edit
                     </Link>
                   </div>
-                  <p className="shrink-0 font-semibold">
-                    {formatMoney(g.estimatedValue, asCurrency(g.currency))}
-                  </p>
+                  <p className="shrink-0 font-semibold">{formatMoney(g.estimatedValue, currency)}</p>
                 </div>
               </li>
             ))}
