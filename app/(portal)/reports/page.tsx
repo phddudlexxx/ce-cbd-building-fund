@@ -38,7 +38,7 @@ function ReportsInner() {
     <div>
       <ScreenTitle
         title="Reports"
-        subtitle="Tap a category to see every bill and in-kind gift inside it."
+        subtitle="Tap a category to see every bill. Open Pledges, Cash, In-kind or Spend and tap Edit to fix a record."
       />
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {tabs.map((t) => (
@@ -146,6 +146,7 @@ function ReportsInner() {
                   <th className="pb-2 font-medium">Paid</th>
                   <th className="pb-2 font-medium">Left</th>
                   <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -159,6 +160,11 @@ function ReportsInner() {
                       <td>{formatMoney(paid, currency)}</td>
                       <td>{formatMoney(Math.max(0, p.amount - paid), currency)}</td>
                       <td className="capitalize">{p.status}</td>
+                      <td>
+                        <Link href={`/capture/pledge?id=${p.id}`} className="font-medium text-[var(--purple)]">
+                          Edit
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })}
@@ -180,6 +186,7 @@ function ReportsInner() {
             formatMoney(d.amount, asCurrency(d.currency)),
             d.method.toUpperCase(),
           ])}
+          hrefs={store.donations.map((d) => `/capture/cash?id=${d.id}`)}
           heads={["Date", "Receipt", "Name", "Amount", "How"]}
           empty="No cash received yet."
         />
@@ -195,6 +202,7 @@ function ReportsInner() {
             formatMoney(g.estimatedValue, asCurrency(g.currency)),
             EXPENSE_CATEGORIES.find((c) => c.id === g.categoryId)?.name ?? g.categoryId,
           ])}
+          hrefs={store.inKind.map((g) => `/capture/inkind?id=${g.id}`)}
           heads={["Date", "From", "What", "Qty", "Value", "Offsets"]}
           empty="No in-kind gifts yet."
         />
@@ -222,6 +230,7 @@ function ReportsInner() {
               formatMoney(e.amount, asCurrency(e.currency)),
               e.paid ? "Paid" : "Unpaid",
             ])}
+            hrefs={store.expenses.map((e) => `/capture/expense?id=${e.id}`)}
             heads={["Date", "Category", "Payee", "What", "Amount", "Status"]}
             empty="No expenses yet."
           />
@@ -304,6 +313,9 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
                       {` · ${e.paid ? "Paid" : "Unpaid"}`}
                     </p>
                     {e.notes ? <p className="mt-1 text-xs text-[var(--muted)]">{e.notes}</p> : null}
+                    <Link href={`/capture/expense?id=${e.id}`} className="mt-2 inline-block text-sm font-medium text-[var(--purple)]">
+                      Edit
+                    </Link>
                   </div>
                   <p className="shrink-0 font-semibold">{formatMoney(e.amount, asCurrency(e.currency))}</p>
                 </div>
@@ -328,6 +340,9 @@ function CategoryDetail({ store, categoryId }: { store: Store; categoryId: Expen
                       {personName(store, g.personId)} · {g.quantity} {g.unit}
                     </p>
                     <p className="mt-1 text-xs text-[var(--muted)]">{formatDate(g.date)}</p>
+                    <Link href={`/capture/inkind?id=${g.id}`} className="mt-2 inline-block text-sm font-medium text-[var(--purple)]">
+                      Edit
+                    </Link>
                   </div>
                   <p className="shrink-0 font-semibold">
                     {formatMoney(g.estimatedValue, asCurrency(g.currency))}
@@ -355,10 +370,12 @@ function Ledger({
   rows,
   heads,
   empty,
+  hrefs,
 }: {
   rows: string[][];
   heads: string[];
   empty: string;
+  hrefs?: string[];
 }) {
   return (
     <Card>
@@ -371,6 +388,7 @@ function Ledger({
                   {h}
                 </th>
               ))}
+              {hrefs ? <th className="pb-2 font-medium"></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -381,6 +399,13 @@ function Ledger({
                     {cell}
                   </td>
                 ))}
+                {hrefs?.[i] ? (
+                  <td className="py-2">
+                    <Link href={hrefs[i]} className="font-medium text-[var(--purple)]">
+                      Edit
+                    </Link>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

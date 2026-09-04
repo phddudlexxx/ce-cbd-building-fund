@@ -5,6 +5,7 @@ import path from "path";
 import { cookies } from "next/headers";
 
 const COOKIE = "ce_session";
+const PENDING = "ce_otp_pending";
 const DEV_SECRET = "christ-embassy-cbd-building-fund-dev-secret";
 
 let cachedSecret = "";
@@ -52,23 +53,51 @@ function sign(payload: string) {
   return createHmac("sha256", secret()).update(payload).digest("hex");
 }
 
+function cookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  };
+}
+
 export async function createSession() {
   const exp = Date.now() + 1000 * 60 * 60 * 24 * 30;
   const payload = Buffer.from(JSON.stringify({ exp })).toString("base64url");
   const token = `${payload}.${sign(payload)}`;
   const jar = await cookies();
-  jar.set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  jar.set(COOKIE, token, cookieOptions(60 * 60 * 24 * 30));
+  jar.delete(PENDING);
+}
+
+export async function createPendingOtp() {
+  const exp = Date.now() + 1000 * 60 * 10;
+  const payload = Buffer.from(JSON.stringify({ step: "otp", exp })).toString("base64url");
+  const token = `${payload}.${sign(payload)}`;
+  const jar = await cookies();
+  jar.set(PENDING, token, cookieOptions(60 * 10));
+}
+
+export async function hasPendingOtp() {
+  const jar = await cookies();
+  const token = jar.get(PENDING)?.value;
+  if (!token) return false;
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig || sign(payload) !== sig) return false;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as { step?: string; exp: number };
+    return data.step === "otp" && data.exp > Date.now();
+  } catch {
+    return false;
+  }
 }
 
 export async function clearSession() {
   const jar = await cookies();
   jar.delete(COOKIE);
+  jar.delete(PENDING);
 }
 
 export async function hasSession() {

@@ -31,7 +31,7 @@ export default function CapturePage() {
     <div>
       <ScreenTitle
         title="Capture"
-        subtitle="Use these four buttons on site. Keep it short — the detail can wait for later."
+        subtitle="Use these four buttons on site. To change something later, open Reports and tap Edit."
       />
       <div className="space-y-3">
         {actions.map((a) => (

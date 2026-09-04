@@ -144,6 +144,7 @@ function applyMutation(store: Store, mutation: Mutation) {
     case "upsert": {
       const list = store[mutation.collection] as Array<{ id: string }>;
       const idx = list.findIndex((item) => item.id === mutation.record.id);
+      let oldPledgeId = "";
       if (mutation.collection === "people") {
         const rec = mutation.record as Person;
         rec.name = formatPerson(rec);
@@ -155,16 +156,26 @@ function applyMutation(store: Store, mutation: Mutation) {
           store.nextReceipt += 1;
         }
       }
-      if (idx >= 0) list[idx] = mutation.record;
-      else list.unshift(mutation.record);
+      if (idx >= 0) {
+        if (mutation.collection === "donations") {
+          oldPledgeId = (list[idx] as Donation).pledgeId;
+        }
+        list[idx] = mutation.record;
+      } else list.unshift(mutation.record);
       if (mutation.collection === "donations") {
-        refreshPledgeStatus(store, (mutation.record as Donation).pledgeId);
+        const rec = mutation.record as Donation;
+        if (oldPledgeId) refreshPledgeStatus(store, oldPledgeId);
+        refreshPledgeStatus(store, rec.pledgeId);
       }
       return;
     }
     case "delete": {
       const list = store[mutation.collection] as Array<{ id: string }>;
+      const removed = list.find((item) => item.id === mutation.id);
       store[mutation.collection] = list.filter((item) => item.id !== mutation.id) as never;
+      if (mutation.collection === "donations" && removed) {
+        refreshPledgeStatus(store, (removed as Donation).pledgeId);
+      }
       return;
     }
     case "settings": {

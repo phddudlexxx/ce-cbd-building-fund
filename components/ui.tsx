@@ -195,11 +195,13 @@ export function SaveBar({
   saving,
   error,
   onCancel,
+  onDelete,
   label = "Save",
 }: {
   saving: boolean;
   error: string;
   onCancel: () => void;
+  onDelete?: () => void;
   label?: string;
 }) {
   const router = useRouter();
@@ -209,6 +211,16 @@ export function SaveBar({
       <PrimaryButton type="submit" disabled={saving}>
         {saving ? "Saving…" : label}
       </PrimaryButton>
+      {onDelete ? (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onDelete}
+          className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-base font-medium text-red-800 disabled:opacity-50"
+        >
+          Delete this record
+        </button>
+      ) : null}
       <GhostButton
         type="button"
         onClick={() => {

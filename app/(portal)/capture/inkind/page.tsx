@@ -1,17 +1,21 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PersonPicker } from "@/components/PersonPicker";
 import { CurrencyToggle, Field, inputClass, SaveBar, ScreenTitle } from "@/components/ui";
 import { EXPENSE_CATEGORIES, INKIND_TYPES } from "@/lib/categories";
-import { lastCurrency, parseMoney, rememberCurrency, todayISO, type Currency } from "@/lib/money";
+import { asCurrency, lastCurrency, parseMoney, rememberCurrency, todayISO, type Currency } from "@/lib/money";
 import type { InKind } from "@/lib/types";
 import { useData } from "@/lib/use-data";
 
-export default function InKindCapturePage() {
+function InKindForm() {
   const { store, mutate } = useData();
   const router = useRouter();
+  const params = useSearchParams();
+  const editId = params.get("id");
+  const existing = store?.inKind.find((g) => g.id === editId);
+
   const [personId, setPersonId] = useState("");
   const [currency, setCurrency] = useState<Currency>(lastCurrency);
   const [description, setDescription] = useState("");
@@ -25,6 +29,20 @@ export default function InKindCapturePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!existing) return;
+    setPersonId(existing.personId);
+    setCurrency(asCurrency(existing.currency));
+    setDescription(existing.description);
+    setType(existing.type);
+    setQuantity(String(existing.quantity));
+    setUnit(existing.unit);
+    setValue(String(existing.estimatedValue));
+    setCategoryId(existing.categoryId);
+    setDate(existing.date);
+    setNotes(existing.notes);
+  }, [existing]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!personId) return setError("Choose who gave this.");
@@ -35,7 +53,7 @@ export default function InKindCapturePage() {
     setError("");
     rememberCurrency(currency);
     const record: InKind = {
-      id: crypto.randomUUID(),
+      id: existing?.id ?? crypto.randomUUID(),
       personId,
       description: description.trim(),
       type: type as InKind["type"],
@@ -45,15 +63,28 @@ export default function InKindCapturePage() {
       currency,
       categoryId: categoryId as InKind["categoryId"],
       date,
-      receivedBy: store?.settings.capturedBy ?? "",
+      receivedBy: existing?.receivedBy || store?.settings.capturedBy || "",
       notes,
-      createdAt: new Date().toISOString(),
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
     try {
       await mutate({ op: "upsert", collection: "inKind", record });
-      router.push("/capture");
+      router.push("/reports?tab=In-kind");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
+      setSaving(false);
+    }
+  }
+
+  async function onDelete() {
+    if (!existing) return;
+    if (!confirm("Delete this in-kind gift?")) return;
+    setSaving(true);
+    try {
+      await mutate({ op: "delete", collection: "inKind", id: existing.id });
+      router.push("/reports?tab=In-kind");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete");
       setSaving(false);
     }
   }
@@ -61,7 +92,7 @@ export default function InKindCapturePage() {
   return (
     <form onSubmit={onSubmit}>
       <ScreenTitle
-        title="Gift in kind"
+        title={existing ? "Edit gift in kind" : "Gift in kind"}
         subtitle="This does not increase cash. It reduces what we still need to buy in that building category."
       />
       <div className="space-y-4">
@@ -127,7 +158,21 @@ export default function InKindCapturePage() {
           <input className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
       </div>
-      <SaveBar saving={saving} error={error} onCancel={() => undefined} label="Save in-kind gift" />
+      <SaveBar
+        saving={saving}
+        error={error}
+        onCancel={() => undefined}
+        onDelete={existing ? () => void onDelete() : undefined}
+        label={existing ? "Save changes" : "Save in-kind gift"}
+      />
     </form>
+  );
+}
+
+export default function InKindCapturePage() {
+  return (
+    <Suspense fallback={<p className="py-10 text-center text-[var(--muted)]">Loading…</p>}>
+      <InKindForm />
+    </Suspense>
   );
 }

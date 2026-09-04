@@ -1,16 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CurrencyToggle, Field, inputClass, SaveBar, ScreenTitle } from "@/components/ui";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/categories";
-import { lastCurrency, parseMoney, rememberCurrency, todayISO, type Currency } from "@/lib/money";
+import { asCurrency, lastCurrency, parseMoney, rememberCurrency, todayISO, type Currency } from "@/lib/money";
 import type { Expense } from "@/lib/types";
 import { useData } from "@/lib/use-data";
 
-export default function ExpenseCapturePage() {
-  const { mutate } = useData();
+function ExpenseForm() {
+  const { store, mutate } = useData();
   const router = useRouter();
+  const params = useSearchParams();
+  const editId = params.get("id");
+  const existing = store?.expenses.find((e) => e.id === editId);
+
   const [categoryId, setCategoryId] = useState("structure");
   const [currency, setCurrency] = useState<Currency>(lastCurrency);
   const [amount, setAmount] = useState("");
@@ -24,6 +28,20 @@ export default function ExpenseCapturePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!existing) return;
+    setCategoryId(existing.categoryId);
+    setCurrency(asCurrency(existing.currency));
+    setAmount(String(existing.amount));
+    setPayee(existing.payee);
+    setDescription(existing.description);
+    setDate(existing.date);
+    setInvoiceNo(existing.invoiceNo);
+    setMethod(existing.method);
+    setPaid(existing.paid);
+    setNotes(existing.notes);
+  }, [existing]);
+
   const cat = EXPENSE_CATEGORIES.find((c) => c.id === categoryId);
 
   async function onSubmit(e: FormEvent) {
@@ -36,7 +54,7 @@ export default function ExpenseCapturePage() {
     setError("");
     rememberCurrency(currency);
     const record: Expense = {
-      id: crypto.randomUUID(),
+      id: existing?.id ?? crypto.randomUUID(),
       categoryId: categoryId as Expense["categoryId"],
       amount: value,
       currency,
@@ -47,13 +65,26 @@ export default function ExpenseCapturePage() {
       method: method as Expense["method"],
       paid,
       notes,
-      createdAt: new Date().toISOString(),
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
     try {
       await mutate({ op: "upsert", collection: "expenses", record });
-      router.push("/capture");
+      router.push("/reports?tab=Spend");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
+      setSaving(false);
+    }
+  }
+
+  async function onDelete() {
+    if (!existing) return;
+    if (!confirm("Delete this bill?")) return;
+    setSaving(true);
+    try {
+      await mutate({ op: "delete", collection: "expenses", id: existing.id });
+      router.push("/reports?tab=Spend");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete");
       setSaving(false);
     }
   }
@@ -61,7 +92,7 @@ export default function ExpenseCapturePage() {
   return (
     <form onSubmit={onSubmit}>
       <ScreenTitle
-        title="Spend"
+        title={existing ? "Edit spend" : "Spend"}
         subtitle="Pick one of the eleven building buckets. Do not create a new category for every supplier or bag of cement."
       />
       <div className="space-y-4">
@@ -124,7 +155,21 @@ export default function ExpenseCapturePage() {
           <input className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
       </div>
-      <SaveBar saving={saving} error={error} onCancel={() => undefined} label="Save expense" />
+      <SaveBar
+        saving={saving}
+        error={error}
+        onCancel={() => undefined}
+        onDelete={existing ? () => void onDelete() : undefined}
+        label={existing ? "Save changes" : "Save expense"}
+      />
     </form>
+  );
+}
+
+export default function ExpenseCapturePage() {
+  return (
+    <Suspense fallback={<p className="py-10 text-center text-[var(--muted)]">Loading…</p>}>
+      <ExpenseForm />
+    </Suspense>
   );
 }

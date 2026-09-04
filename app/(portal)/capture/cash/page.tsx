@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PersonPicker } from "@/components/PersonPicker";
 import { CurrencyToggle, Field, inputClass, SaveBar, ScreenTitle } from "@/components/ui";
 import { GIFT_TYPES, PAYMENT_METHODS } from "@/lib/categories";
@@ -10,9 +10,13 @@ import { pledgePaid } from "@/lib/summaries";
 import type { Donation } from "@/lib/types";
 import { useData } from "@/lib/use-data";
 
-export default function CashCapturePage() {
+function CashForm() {
   const { store, mutate } = useData();
   const router = useRouter();
+  const params = useSearchParams();
+  const editId = params.get("id");
+  const existing = store?.donations.find((d) => d.id === editId);
+
   const [personId, setPersonId] = useState("");
   const [currency, setCurrency] = useState<Currency>(lastCurrency);
   const [amount, setAmount] = useState("");
@@ -25,12 +29,28 @@ export default function CashCapturePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!existing) return;
+    setPersonId(existing.personId);
+    setCurrency(asCurrency(existing.currency));
+    setAmount(String(existing.amount));
+    setMethod(existing.method);
+    setGiftType(existing.giftType);
+    setPledgeId(existing.pledgeId);
+    setReference(existing.reference);
+    setDate(existing.date);
+    setNotes(existing.notes);
+  }, [existing]);
+
   const openPledges = useMemo(() => {
     if (!store || !personId) return [];
     return store.pledges.filter(
-      (p) => p.personId === personId && p.status === "active" && asCurrency(p.currency) === currency,
+      (p) =>
+        p.personId === personId &&
+        asCurrency(p.currency) === currency &&
+        (p.status === "active" || p.id === pledgeId),
     );
-  }, [store, personId, currency]);
+  }, [store, personId, currency, pledgeId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -42,7 +62,7 @@ export default function CashCapturePage() {
     setError("");
     rememberCurrency(currency);
     const record: Donation = {
-      id: crypto.randomUUID(),
+      id: existing?.id ?? crypto.randomUUID(),
       personId,
       amount: value,
       currency,
@@ -51,23 +71,42 @@ export default function CashCapturePage() {
       giftType: giftType as Donation["giftType"],
       pledgeId: giftType === "pledge-payment" ? pledgeId : "",
       reference,
-      receiptNo: "",
+      receiptNo: existing?.receiptNo ?? "",
       notes,
-      createdAt: new Date().toISOString(),
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
     try {
       await mutate({ op: "upsert", collection: "donations", record });
-      router.push("/capture");
+      router.push("/reports?tab=Cash");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
       setSaving(false);
     }
   }
 
+  async function onDelete() {
+    if (!existing) return;
+    if (!confirm("Delete this cash record? The receipt will no longer appear in reports.")) return;
+    setSaving(true);
+    try {
+      await mutate({ op: "delete", collection: "donations", id: existing.id });
+      router.push("/reports?tab=Cash");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete");
+      setSaving(false);
+    }
+  }
+
   return (
     <form onSubmit={onSubmit}>
-      <ScreenTitle title="Cash in" subtitle="Only record money that has actually been received, in the currency it arrived." />
+      <ScreenTitle
+        title={existing ? "Edit cash in" : "Cash in"}
+        subtitle="Only record money that has actually been received, in the currency it arrived."
+      />
       <div className="space-y-4">
+        {existing?.receiptNo ? (
+          <p className="rounded-xl bg-[#fffaf0] px-3 py-2 text-sm">Receipt {existing.receiptNo}</p>
+        ) : null}
         <PersonPicker value={personId} onChange={setPersonId} />
         <CurrencyToggle
           value={currency}
@@ -140,7 +179,21 @@ export default function CashCapturePage() {
           <input className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
       </div>
-      <SaveBar saving={saving} error={error} onCancel={() => undefined} label="Save cash in" />
+      <SaveBar
+        saving={saving}
+        error={error}
+        onCancel={() => undefined}
+        onDelete={existing ? () => void onDelete() : undefined}
+        label={existing ? "Save changes" : "Save cash in"}
+      />
     </form>
+  );
+}
+
+export default function CashCapturePage() {
+  return (
+    <Suspense fallback={<p className="py-10 text-center text-[var(--muted)]">Loading…</p>}>
+      <CashForm />
+    </Suspense>
   );
 }
