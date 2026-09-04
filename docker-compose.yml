@@ -1,0 +1,37 @@
+# Run on the UGreen NAS (same Docker as the guest WiFi portal).
+# Image is built by GitHub Actions and pulled here — no build on the NAS.
+#
+# Public URL: https://build.cehararecbd.xyz
+# In Cloudflare Zero Trust → Tunnels → church-wifi-nas → Public Hostname:
+#   Subdomain  build
+#   Domain     cehararecbd.xyz
+#   Service    http://building-fund:3000
+#
+# This compose joins the existing church-wifi Docker network so the
+# Cloudflare tunnel already running for wifi.cehararecbd.xyz can reach this app.
+
+services:
+  building-fund:
+    image: ghcr.io/phddudlexxx/ce-cbd-building-fund:latest
+    container_name: building-fund
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      APP_PIN: "1234"
+    volumes:
+      - building_fund_data:/app/data
+    ports:
+      - "3007:3000"
+    networks:
+      - default
+      - church-wifi
+
+networks:
+  church-wifi:
+    external: true
+    name: church-wifi_default
+
+volumes:
+  building_fund_data:

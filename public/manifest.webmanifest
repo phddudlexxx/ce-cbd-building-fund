@@ -1,0 +1,17 @@
+{
+  "name": "CE CBD Building Fund",
+  "short_name": "CE CBD Build",
+  "description": "Capture pledges, donations, in-kind gifts and building expenses.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#4c1d6a",
+  "theme_color": "#4c1d6a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

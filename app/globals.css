@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  --purple: #4c1d6a;
+  --purple-deep: #2e0f45;
+  --gold: #c4a24a;
+  --cream: #f6f1e8;
+  --ink: #1c1424;
+  --muted: #6d6178;
+  --line: #e6dccf;
+  --background: var(--cream);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}

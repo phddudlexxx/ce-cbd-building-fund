@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+data/store.json
+data/store.json.bak
+data/store.json.tmp
+data/auth-secret.txt
+*.md
+nas-compose-READY.yml
+.env
+.env.*
+!.env.example
