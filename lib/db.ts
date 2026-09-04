@@ -116,6 +116,14 @@ export function getStore() {
 
 export function mutateStore(mutation: Mutation) {
   const run = writeQueue.then(async () => {
+    if (mutation.op === "import") {
+      const next = migrate(mutation.store);
+      if (!next.people?.length) {
+        throw new Error("That file does not look like the building-fund books.");
+      }
+      await persist(next);
+      return next;
+    }
     const store = await readStore();
     applyMutation(store, mutation);
     await persist(store);

@@ -45,7 +45,27 @@ export default function SettingsPage() {
     setMessage("Saved.");
   }
 
+  async function importBooks(file: File | null) {
+    if (!file) return;
+    setMessage("");
+    try {
+      const parsed = JSON.parse(await file.text()) as { people?: unknown; pledges?: unknown; donations?: unknown };
+      if (!Array.isArray(parsed.people) || !Array.isArray(parsed.pledges) || !Array.isArray(parsed.donations)) {
+        setMessage("That is not a building-fund books file.");
+        return;
+      }
+      if (!confirm("Replace the live books with this file? Anything already on the live site will be overwritten.")) {
+        return;
+      }
+      await mutate({ op: "import", store: parsed as never });
+      setMessage("Books copied onto the live site.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not import that file.");
+    }
+  }
+
   return (
+    <div className="space-y-4">
     <form onSubmit={save} className="space-y-4">
       <ScreenTitle title="Settings" subtitle="Books are kept in USD$ and ZWG$. Both are primary — neither is converted into the other." />
       <Card className="space-y-3">
@@ -89,5 +109,19 @@ export default function SettingsPage() {
       {message ? <p className="text-sm text-green-800">{message}</p> : null}
       <PrimaryButton type="submit">Save settings</PrimaryButton>
     </form>
+      <Card className="space-y-3">
+        <h3 className="font-semibold">Copy books from this computer</h3>
+        <p className="text-sm text-[var(--muted)]">
+          Choose the file <strong>store.json</strong> from this PC. It is in the building-fund folder, under{" "}
+          <strong>data</strong>.
+        </p>
+        <input
+          className={inputClass}
+          type="file"
+          accept="application/json,.json"
+          onChange={(e) => void importBooks(e.target.files?.[0] ?? null)}
+        />
+      </Card>
+    </div>
   );
 }

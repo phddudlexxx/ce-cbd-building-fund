@@ -98,6 +98,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  const store = await mutateStore(body);
-  return NextResponse.json(publicStore(store));
+  try {
+    const store = await mutateStore(body);
+    return NextResponse.json(publicStore(store));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not save" },
+      { status: 400 },
+    );
+  }
 }

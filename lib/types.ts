@@ -128,4 +128,5 @@ export type Mutation =
   | { op: "delete"; collection: CollectionName; id: string }
   | { op: "settings"; settings: Partial<Omit<Settings, "pinHash">> }
   | { op: "pin"; pin: string }
-  | { op: "budgets"; budgets: BudgetLine[] };
+  | { op: "budgets"; budgets: BudgetLine[] }
+  | { op: "import"; store: Store };
