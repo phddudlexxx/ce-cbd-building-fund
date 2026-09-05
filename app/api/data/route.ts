@@ -9,7 +9,7 @@ import {
 } from "@/lib/auth";
 import { getStore, mutateStore, publicStore } from "@/lib/db";
 import { canResendOtp, clearOtp, createOtpCode, saveOtp, verifyOtp } from "@/lib/otp";
-import { maskPhone, otpPhone, sendOtpSms } from "@/lib/sms";
+import { maskPhone, otpPhone, sendOtpSms, smsConfigured } from "@/lib/sms";
 import type { Mutation } from "@/lib/types";
 
 type LoginBody =
@@ -41,13 +41,17 @@ export async function POST(req: NextRequest) {
     if (!verifyPin(body.pin, store.settings.pinHash || "")) {
       return NextResponse.json({ error: "Incorrect PIN" }, { status: 401 });
     }
+    if (!smsConfigured() && process.env.NODE_ENV === "production") {
+      await createSession();
+      return NextResponse.json({ ok: true, needOtp: false });
+    }
     try {
       await sendFreshCode();
     } catch (err) {
       await clearOtp();
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Could not send the SMS code." },
-        { status: 502 },
+        { status: 503 },
       );
     }
     await createPendingOtp();

@@ -23,6 +23,10 @@ export function normalizeZimPhone(value: string) {
   return trimmed.startsWith("+") ? trimmed : `+${digits}`;
 }
 
+export function smsConfigured() {
+  return Boolean(process.env.AT_USERNAME?.trim() && process.env.AT_API_KEY?.trim());
+}
+
 export async function sendOtpSms(phone: string, code: string) {
   const username = process.env.AT_USERNAME?.trim();
   const apiKey = process.env.AT_API_KEY?.trim();

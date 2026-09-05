@@ -19,7 +19,11 @@ function LoginForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; phone?: string };
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      phone?: string;
+      needOtp?: boolean;
+    };
     return { ok: res.ok, status: res.status, data };
   }
 
@@ -30,7 +34,15 @@ function LoginForm() {
     const res = await post({ op: "login", pin });
     setBusy(false);
     if (!res.ok) {
-      setError(res.data.error || "That PIN is not right. Try again.");
+      setError(
+        res.data.error ||
+          "The PIN may be correct, but the SMS code could not be sent. Try again in a moment.",
+      );
+      return;
+    }
+    if (!res.data.needOtp) {
+      router.replace(params.get("next") || "/");
+      router.refresh();
       return;
     }
     setPhone(res.data.phone || "");
