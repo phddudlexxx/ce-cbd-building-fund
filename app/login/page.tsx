@@ -19,7 +19,11 @@ function LoginForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; phone?: string };
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      phone?: string;
+      needOtp?: boolean;
+    };
     return { ok: res.ok, status: res.status, data };
   }
 
@@ -30,7 +34,19 @@ function LoginForm() {
     const res = await post({ op: "login", pin });
     setBusy(false);
     if (!res.ok) {
-      setError(res.data.error || "That PIN is not right. Try again.");
+      if (res.status === 401) {
+        setError(res.data.error || "That PIN is not right. Try again.");
+      } else {
+        setError(
+          res.data.error ||
+            "Could not send the SMS login code. Check Africa's Talking on the NAS, then try again.",
+        );
+      }
+      return;
+    }
+    if (res.data.needOtp === false) {
+      router.replace(params.get("next") || "/");
+      router.refresh();
       return;
     }
     setPhone(res.data.phone || "");
@@ -131,10 +147,10 @@ function LoginForm() {
         disabled={busy || pin.length < 4}
         className="w-full rounded-2xl bg-[var(--purple)] py-3.5 font-semibold text-white disabled:opacity-50"
       >
-        {busy ? "Sending code…" : "Send SMS code"}
+        {busy ? "Signing in…" : "Continue"}
       </button>
       <p className="text-center text-xs text-[var(--muted)]">
-        After the PIN, a code is sent to the church accountant phone.
+        If SMS login is set up on the NAS, a code is sent to the church accountant phone after the PIN.
       </p>
     </form>
   );

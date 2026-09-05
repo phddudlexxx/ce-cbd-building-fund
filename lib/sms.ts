@@ -23,6 +23,10 @@ export function normalizeZimPhone(value: string) {
   return trimmed.startsWith("+") ? trimmed : `+${digits}`;
 }
 
+export function smsConfigured() {
+  return Boolean(process.env.AT_USERNAME?.trim() && process.env.AT_API_KEY?.trim());
+}
+
 export async function sendOtpSms(phone: string, code: string) {
   const username = process.env.AT_USERNAME?.trim();
   const apiKey = process.env.AT_API_KEY?.trim();
@@ -32,7 +36,7 @@ export async function sendOtpSms(phone: string, code: string) {
       console.info(`[OTP] Africa's Talking not set. Code for ${maskPhone(phone)} is ${code}`);
       return;
     }
-    throw new Error("SMS is not configured on the server.");
+    throw new Error("SMS is not configured on the server. Set AT_USERNAME and AT_API_KEY on the NAS.");
   }
 
   const form = new URLSearchParams({
@@ -42,15 +46,29 @@ export async function sendOtpSms(phone: string, code: string) {
   });
   if (from) form.set("from", from);
 
-  const res = await fetch(AT_URL, {
-    method: "POST",
-    headers: {
-      apiKey,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: form.toString(),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  let res: Response;
+  try {
+    res = await fetch(AT_URL, {
+      method: "POST",
+      headers: {
+        apiKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: form.toString(),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The SMS service timed out. Check the NAS can reach Africa's Talking.");
+    }
+    throw new Error("Could not reach the SMS service. Try again in a moment.");
+  } finally {
+    clearTimeout(timer);
+  }
+
   const raw = await res.text().catch(() => "");
   if (!res.ok) {
     throw new Error("Could not send the SMS code. Try again in a moment.");

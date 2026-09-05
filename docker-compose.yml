@@ -21,8 +21,10 @@ services:
       PORT: "3000"
       APP_PIN: "1234"
       OTP_PHONE: "+263773400256"
-      AT_USERNAME: ${AT_USERNAME}
-      AT_API_KEY: ${AT_API_KEY}
+      # Optional SMS 2FA (Africa's Talking). If unset, PIN alone signs in.
+      # Put AT_USERNAME / AT_API_KEY in a .env beside this compose file.
+      AT_USERNAME: ${AT_USERNAME:-}
+      AT_API_KEY: ${AT_API_KEY:-}
       AT_SENDER_ID: ${AT_SENDER_ID:-}
     volumes:
       - building_fund_data:/app/data

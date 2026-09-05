@@ -8,7 +8,7 @@ const links = [
   { href: "/people", title: "People", body: "Members, companies and anonymous givers." },
   { href: "/budget", title: "Budget", body: "Set a number against each building category." },
   { href: "/guide", title: "What to collect", body: "The ministry building-campaign template behind this portal." },
-  { href: "/settings", title: "Settings", body: "Church name, USD$ and ZWG$ goals, and PIN. Login also asks for an SMS code." },
+  { href: "/settings", title: "Settings", body: "Church name, USD$ and ZWG$ goals, and PIN. SMS login is optional when Africa's Talking is configured on the NAS." },
 ];
 
 export default function MorePage() {

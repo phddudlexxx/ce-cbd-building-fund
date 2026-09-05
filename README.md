@@ -52,6 +52,8 @@ npm run dev:lan
 
 To reach it from anywhere (4G, another city), leave this running and put a tunnel in front of it (Cloudflare Tunnel, ngrok) or deploy the folder to a small host such as Railway / Render with a persistent disk for the `data` folder. The books live in `data/store.json` — copy that file to back up.
 
+On the UGreen NAS, `docker-compose.yml` pulls the published image and joins the church-wifi Cloudflare tunnel (`https://build.cehararecbd.xyz`). Default PIN is `1234`. SMS 2FA needs `AT_USERNAME` and `AT_API_KEY` in a `.env` beside that compose file; without them, the PIN alone signs in.
+
 For a steadier local server after the first run:
 
 ```bash
