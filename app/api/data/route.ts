@@ -9,7 +9,7 @@ import {
 } from "@/lib/auth";
 import { getStore, mutateStore, publicStore } from "@/lib/db";
 import { canResendOtp, clearOtp, createOtpCode, saveOtp, verifyOtp } from "@/lib/otp";
-import { maskPhone, otpPhone, sendOtpSms } from "@/lib/sms";
+import { maskPhone, otpPhone, sendOtpSms, smsConfigured } from "@/lib/sms";
 import type { Mutation } from "@/lib/types";
 
 type LoginBody =
@@ -39,7 +39,13 @@ export async function POST(req: NextRequest) {
   if (body.op === "login") {
     const store = await getStore();
     if (!verifyPin(body.pin, store.settings.pinHash || "")) {
-      return NextResponse.json({ error: "Incorrect PIN" }, { status: 401 });
+      return NextResponse.json({ error: "That PIN is not right. Try again." }, { status: 401 });
+    }
+    // Without Africa's Talking keys on the NAS, PIN alone signs in so the books stay reachable.
+    if (!smsConfigured()) {
+      await clearOtp();
+      await createSession();
+      return NextResponse.json({ ok: true, needOtp: false });
     }
     try {
       await sendFreshCode();
@@ -47,7 +53,7 @@ export async function POST(req: NextRequest) {
       await clearOtp();
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Could not send the SMS code." },
-        { status: 502 },
+        { status: 503 },
       );
     }
     await createPendingOtp();
@@ -57,6 +63,12 @@ export async function POST(req: NextRequest) {
   if (body.op === "resend-otp") {
     if (!(await hasPendingOtp())) {
       return NextResponse.json({ error: "Enter your PIN first." }, { status: 401 });
+    }
+    if (!smsConfigured()) {
+      return NextResponse.json(
+        { error: "SMS is not configured on the server. Set AT_USERNAME and AT_API_KEY on the NAS." },
+        { status: 503 },
+      );
     }
     const gate = await canResendOtp();
     if (!gate.ok) {
@@ -70,7 +82,7 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Could not send the SMS code." },
-        { status: 502 },
+        { status: 503 },
       );
     }
     return NextResponse.json({ ok: true, phone: maskPhone(otpPhone()) });
